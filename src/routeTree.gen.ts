@@ -9,9 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PmoRouteImport } from './routes/pmo'
+import { Route as PmRouteImport } from './routes/pm'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LeadershipRouteImport } from './routes/leadership'
 import { Route as IndexRouteImport } from './routes/index'
 
+const PmoRoute = PmoRouteImport.update({
+  id: '/pmo',
+  path: '/pmo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PmRoute = PmRouteImport.update({
+  id: '/pm',
+  path: '/pm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeadershipRoute = LeadershipRouteImport.update({
   id: '/leadership',
   path: '/leadership',
@@ -26,31 +44,64 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/leadership': typeof LeadershipRoute
+  '/login': typeof LoginRoute
+  '/pm': typeof PmRoute
+  '/pmo': typeof PmoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/leadership': typeof LeadershipRoute
+  '/login': typeof LoginRoute
+  '/pm': typeof PmRoute
+  '/pmo': typeof PmoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/leadership': typeof LeadershipRoute
+  '/login': typeof LoginRoute
+  '/pm': typeof PmRoute
+  '/pmo': typeof PmoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/leadership'
+  fullPaths: '/' | '/leadership' | '/login' | '/pm' | '/pmo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/leadership'
-  id: '__root__' | '/' | '/leadership'
+  to: '/' | '/leadership' | '/login' | '/pm' | '/pmo'
+  id: '__root__' | '/' | '/leadership' | '/login' | '/pm' | '/pmo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LeadershipRoute: typeof LeadershipRoute
+  LoginRoute: typeof LoginRoute
+  PmRoute: typeof PmRoute
+  PmoRoute: typeof PmoRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/pmo': {
+      id: '/pmo'
+      path: '/pmo'
+      fullPath: '/pmo'
+      preLoaderRoute: typeof PmoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pm': {
+      id: '/pm'
+      path: '/pm'
+      fullPath: '/pm'
+      preLoaderRoute: typeof PmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leadership': {
       id: '/leadership'
       path: '/leadership'
@@ -71,7 +122,20 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LeadershipRoute: LeadershipRoute,
+  LoginRoute: LoginRoute,
+  PmRoute: PmRoute,
+  PmoRoute: PmoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

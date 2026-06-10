@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { useState } from "react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -61,8 +60,17 @@ import {
 import { cn } from "@/lib/utils";
 
 import { INITIAL_PROJECTS, RAG_META, fmtCr, type Project } from "@/components/leadership/types";
+import { DashboardShell } from "@/components/layout/DashboardShell";
+import { ActivityFeed } from "@/components/portfolio/ActivityFeed";
+import { getStoredUser } from "@/lib/auth/session";
+import { usePortfolio, type ActionState } from "@/lib/portfolio-store";
 
 export const Route = createFileRoute("/leadership")({
+  beforeLoad: () => {
+    const user = getStoredUser();
+    if (!user) throw redirect({ to: "/login" });
+    if (user.role !== "leadership") throw redirect({ to: user.route });
+  },
   head: () => ({
     meta: [
       { title: "Leadership View — Sentinel PMO" },
@@ -77,150 +85,61 @@ export const Route = createFileRoute("/leadership")({
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// State container
-// ──────────────────────────────────────────────────────────────────────────────
-
-interface ActionState {
-  vendorFrozen: boolean;
-  altVendorAuthorized: boolean;
-  forceMajeure: boolean;
-  resourceRedeployed: boolean;
-  pmoAudit: boolean;
-  talentBridge: null | "freeze" | "absorb";
-  courseCorrected: boolean;
-}
-
-const INITIAL_ACTIONS: ActionState = {
-  vendorFrozen: false,
-  altVendorAuthorized: false,
-  forceMajeure: false,
-  resourceRedeployed: false,
-  pmoAudit: false,
-  talentBridge: null,
-  courseCorrected: false,
-};
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Root page
 // ──────────────────────────────────────────────────────────────────────────────
 
 function LeadershipPage() {
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [actions, setActions] = useState<ActionState>(INITIAL_ACTIONS);
+  const { projects, actions, handlers, portfolioHealth, revenueAtRisk, tickets, activity } =
+    usePortfolio();
   const [drawer, setDrawer] = useState<
     null | "revenue" | "techstar" | "talentbridge" | "course"
   >(null);
 
-  const portfolioHealth = useMemo(() => {
-    // simple weighted avg of confidence, optimized when corrected
-    const base =
-      projects.reduce((a, p) => a + p.confidence, 0) / projects.length;
-    return Math.round(actions.courseCorrected ? 88 : base + 14); // base ≈ 64.6 → 74; corrected → 88
-  }, [projects, actions.courseCorrected]);
-
-  const revenueAtRisk = useMemo(() => {
-    let total = 19000000; // ₹1.9Cr baseline
-    if (actions.vendorFrozen) total -= 4800000;
-    if (actions.resourceRedeployed) total -= 4000000;
-    if (actions.talentBridge === "freeze") total -= 500000;
-    if (actions.courseCorrected) total = Math.min(total, 7800000);
-    return Math.max(total, 4000000);
-  }, [actions]);
-
   const totalBudget = projects.reduce((a, p) => a + p.budget, 0);
   const totalSpent = projects.reduce((a, p) => a + p.spent, 0);
-
-  const updateProject = (id: string, patch: Partial<Project>) =>
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-
-  // shared action handlers (used by drawers + course correction overlay)
-  const handlers = {
-    freezeVendor: () => {
-      if (actions.vendorFrozen) return;
-      setActions((a) => ({ ...a, vendorFrozen: true }));
-      toast.success("Apex Licensing payments frozen", {
-        description: "Contract compliance dispute logged automatically.",
-      });
-    },
-    authorizeAltVendor: () => {
-      if (actions.altVendorAuthorized) return;
-      setActions((a) => ({ ...a, altVendorAuthorized: true }));
-      toast.success("Alternative SAP vendor sourcing authorized", {
-        description: "Standard procurement cycle bypassed. ETA 72h.",
-      });
-    },
-    forceMajeure: () => {
-      if (actions.forceMajeure) return;
-      setActions((a) => ({ ...a, forceMajeure: true }));
-      toast.success("Force Majeure notice dispatched", {
-        description: "Legal team notified Apex Licensing.",
-      });
-    },
-    redeployResources: () => {
-      if (actions.resourceRedeployed) return;
-      setActions((a) => ({ ...a, resourceRedeployed: true }));
-      updateProject("techstar", { idleResources: 10 });
-      updateProject("cloudedge", {
-        resources: INITIAL_PROJECTS.find((p) => p.id === "cloudedge")!.resources + 20,
-      });
-      toast.success("20 engineers redeployed to CloudEdge", {
-        description: "TechStar idle pool reduced from 30 → 10.",
-      });
-    },
-    pmoAudit: () => {
-      if (actions.pmoAudit) return;
-      setActions((a) => ({ ...a, pmoAudit: true }));
-      toast.success("PMO Internal Audit requested", {
-        description: "High-priority ticket pushed to PMO Head queue.",
-      });
-    },
-    talentFreeze: () => {
-      setActions((a) => ({ ...a, talentBridge: "freeze" }));
-      updateProject("talentbridge", { status: "ontrack", confidence: 76 });
-      toast.success("Scope frozen on TalentBridge HRMS", {
-        description: "PMO instructed to halt unbilled work & present Change Order.",
-      });
-    },
-    talentAbsorb: () => {
-      setActions((a) => ({ ...a, talentBridge: "absorb" }));
-      updateProject("talentbridge", {
-        budget: INITIAL_PROJECTS.find((p) => p.id === "talentbridge")!.budget + 500000,
-        status: "atrisk",
-        confidence: 68,
-      });
-      toast.success("₹5L emergency budget approved", {
-        description: "Scope infusion authorized. Client invoiced post-facto.",
-      });
-    },
-    courseCorrect: () => {
-      setActions((a) => ({
-        ...a,
-        courseCorrected: true,
-        vendorFrozen: true,
-        resourceRedeployed: true,
-        altVendorAuthorized: true,
-        talentBridge: a.talentBridge ?? "freeze",
-      }));
-      updateProject("techstar", { idleResources: 10, status: "atrisk", confidence: 61 });
-      updateProject("cloudedge", {
-        resources: INITIAL_PROJECTS.find((p) => p.id === "cloudedge")!.resources + 20,
-      });
-      updateProject("talentbridge", { status: "ontrack", confidence: 76 });
-      toast.success("Portfolio course correction executed", {
-        description: "Health score optimized 74% → 88%.",
-      });
-    },
-  };
+  const openTickets = tickets.filter((t) => t.status !== "done").length;
+  const resolvedTickets = tickets.filter((t) => t.status === "done").length;
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] text-[#0F172A]">
-      <Header
-        portfolioHealth={portfolioHealth}
-        corrected={actions.courseCorrected}
-        onCourse={() => setDrawer("course")}
-      />
-
-      <main className="mx-auto max-w-[1400px] px-8 py-6">
+    <DashboardShell
+      subtitle="Leadership View · Nexus Digital Solutions"
+      badge="CEO · COO · CFO"
+      actions={
+        <>
+          <div className="flex items-center gap-2 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5">
+            <span className="text-[11px] uppercase tracking-wide text-[#64748B]">
+              Portfolio Health
+            </span>
+            <span
+              className={cn(
+                "text-[13px] font-semibold",
+                actions.courseCorrected ? "text-[#1D9E75]" : "text-[#EF9F27]",
+              )}
+            >
+              {portfolioHealth}%
+            </span>
+          </div>
+          {openTickets > 0 && (
+            <Badge className="rounded-md bg-[#FAEEDA] text-[#633806]">
+              {openTickets} downstream open
+            </Badge>
+          )}
+          {resolvedTickets > 0 && (
+            <Badge className="rounded-md bg-[#EAF3DE] text-[#27500A]">
+              {resolvedTickets} resolved
+            </Badge>
+          )}
+          <Button
+            onClick={() => setDrawer("course")}
+            className="h-9 gap-2 rounded-md bg-[#E24B4A] px-3 text-[13px] font-medium text-white shadow-sm hover:bg-[#C93C3B]"
+          >
+            <Zap className="h-4 w-4" />
+            Course Correction
+          </Button>
+        </>
+      }
+    >
+      <>
         {/* KPI strip */}
         <section className="grid grid-cols-12 gap-4">
           <KpiCard
@@ -338,10 +257,12 @@ function LeadershipPage() {
             </ul>
           </Card>
         </section>
-      </main>
 
-      {/* Drawers */}
-      <RevenueDrawer
+        <section className="mt-8">
+          <ActivityFeed entries={activity} />
+        </section>
+
+        <RevenueDrawer
         open={drawer === "revenue"}
         onOpenChange={(o) => !o && setDrawer(null)}
         actions={actions}
@@ -368,73 +289,8 @@ function LeadershipPage() {
         handlers={handlers}
         portfolioHealth={portfolioHealth}
       />
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Header
-// ──────────────────────────────────────────────────────────────────────────────
-
-function Header({
-  portfolioHealth,
-  corrected,
-  onCourse,
-}: {
-  portfolioHealth: number;
-  corrected: boolean;
-  onCourse: () => void;
-}) {
-  return (
-    <header className="sticky top-0 z-30 border-b border-[#E5E7EB] bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-[1400px] items-center justify-between px-8 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0F172A] text-white">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <div>
-            <div className="text-[15px] font-semibold leading-tight">Sentinel</div>
-            <div className="text-[11px] text-[#64748B] leading-tight">
-              Leadership View · Nexus Digital Solutions
-            </div>
-          </div>
-          <Badge
-            variant="secondary"
-            className="ml-3 rounded-md bg-[#E6F1FB] text-[#0C447C] hover:bg-[#E6F1FB]"
-          >
-            CEO · COO · CFO
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-md border border-[#E5E7EB] bg-white px-3 py-1.5">
-            <span className="text-[11px] uppercase tracking-wide text-[#64748B]">
-              Portfolio Health
-            </span>
-            <span
-              className={cn(
-                "text-[13px] font-semibold",
-                corrected ? "text-[#1D9E75]" : "text-[#EF9F27]",
-              )}
-            >
-              {portfolioHealth}%
-            </span>
-            {corrected ? (
-              <ArrowUpRight className="h-3.5 w-3.5 text-[#1D9E75]" />
-            ) : (
-              <ArrowDownRight className="h-3.5 w-3.5 text-[#EF9F27]" />
-            )}
-          </div>
-          <Button
-            onClick={onCourse}
-            className="h-9 gap-2 rounded-md bg-[#E24B4A] px-3 text-[13px] font-medium text-white shadow-sm hover:bg-[#C93C3B]"
-          >
-            <Zap className="h-4 w-4" />
-            Trigger Portfolio Course Correction
-          </Button>
-        </div>
-      </div>
-    </header>
+      </>
+    </DashboardShell>
   );
 }
 
